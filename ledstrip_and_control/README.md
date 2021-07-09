@@ -1,0 +1,1 @@
+Control LED-strip via PIR-sensor, read disk usage, read CPU temperature, logging and control panel

@@ -1,2 +1,2 @@
 # RaspberryPi
-Collection of Raspberry Pi Scripts and Programms
+Collection of Raspberry Pi Scripts and Programs
