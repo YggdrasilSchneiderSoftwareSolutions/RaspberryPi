@@ -97,7 +97,7 @@ try:
                 'humidity': avg_humidity,
                 'pressure': avg_pressure
             }
-            response = requests.post('http://localhost/raspi/backend_service.php', data=dataObj,
+            response = requests.post(DB_SERVICE_URL, data=dataObj,
                                      headers={'Content-type': 'application/x-www-form-urlencoded'})
             if response.text != 'success':
                 raise Exception('Error in Backend')
