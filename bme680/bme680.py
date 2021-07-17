@@ -1,10 +1,21 @@
 import time
 import board
 import adafruit_bme680
-import database
+import requests
 import statistics
 import log
 import sys
+import configparser
+
+# setup config
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+# Backend-URL for database service
+DB_SERVICE_URL = 'http://' \
+                 + config["production.server"].get("host")\
+                 + '/'\
+                 + config["production.server"].get("serviceLocation")
 
 # Create sensor object, communicating over the board's default I2C bus
 i2c = board.I2C()  # uses board.SCL and board.SDA
@@ -79,8 +90,18 @@ try:
             avg_humidity = statistics.mean(humidities)
             avg_pressure = statistics.mean(pressures)
 
-            database.insert("INSERT INTO BME680 (temperature, gas, humidity, pressure) values (%s, %s, %s, %s)",
-                            (avg_temperature, avg_gas, avg_humidity, avg_pressure))
+            # send to backend
+            dataObj = {
+                'temperature': avg_temperature,
+                'gas': avg_gas,
+                'humidity': avg_humidity,
+                'pressure': avg_pressure
+            }
+            response = requests.post('http://localhost/raspi/backend_service.php', data=dataObj,
+                                     headers={'Content-type': 'application/x-www-form-urlencoded'})
+            if response.text != 'success':
+                raise Exception('Error in Backend')
+
             # reset counter
             sec_passed = 0
 
