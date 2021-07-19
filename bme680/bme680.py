@@ -107,4 +107,4 @@ try:
 except KeyboardInterrupt:
     pass
 except:
-    log.error(sys.exc_info()[0])
+    log.error(sys.exc_info()[0:2])
