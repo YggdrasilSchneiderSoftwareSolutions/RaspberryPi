@@ -104,6 +104,7 @@ try:
 
             # reset counter
             sec_passed = 0
-
+except KeyboardInterrupt:
+    pass
 except:
     log.error(sys.exc_info()[0])
