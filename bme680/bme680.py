@@ -104,6 +104,8 @@ try:
 
             # reset counter
             sec_passed = 0
+            # reset data-list
+            data = []
 except KeyboardInterrupt:
     pass
 except:
