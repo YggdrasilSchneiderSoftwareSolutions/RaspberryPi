@@ -21,7 +21,7 @@ DB_SERVICE_URL = 'http://' \
 i2c = board.I2C()  # uses board.SCL and board.SDA
 bme680 = adafruit_bme680.Adafruit_BME680_I2C(i2c, debug=False)
 
-# change this to match the location's pressure (hPa) at sea level
+# change this to match the location's pressure (hPa) at sea level (possibly for altitude only)
 bme680.sea_level_pressure = 1012.0
 
 # for altitude (here not used)
@@ -97,16 +97,27 @@ try:
                 'humidity': avg_humidity,
                 'pressure': avg_pressure
             }
-            response = requests.post(DB_SERVICE_URL, data=dataObj,
-                                     headers={'Content-type': 'application/x-www-form-urlencoded'})
+
+            try:
+                response = requests.post(DB_SERVICE_URL, data=dataObj,
+                                         headers={'Content-type': 'application/x-www-form-urlencoded'})
+
+            # Sometimes Raspberry has problems with DNS...
+            except requests.exceptions.ConnectionError:
+                log.info('ConnectionError. Possibly problem with DNS')
+                continue
+
             if response.text != 'success':
-                raise Exception('Error in Backend')
+                raise Exception('Error in Backend: ' + response.text)
 
             # reset counter
             sec_passed = 0
             # reset data-list
             data = []
-except KeyboardInterrupt:
+
+except KeyboardInterrupt:  # normal when stopping script
     pass
+except (MemoryError, OSError):  # possible if DNS-Error occurs and we're running out of memory
+    log.error(sys.exc_info()[0:2])
 except:
     log.error(sys.exc_info()[0:2])
