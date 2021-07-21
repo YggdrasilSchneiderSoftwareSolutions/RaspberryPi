@@ -108,7 +108,7 @@ try:
                 continue
 
             if response.text != 'success':
-                raise Exception('Error in Backend: ' + response.text)
+                raise Exception('Error in Backend. Http-status {}, {}'.format(response.status_code, response.text))
 
             # reset counter
             sec_passed = 0
