@@ -56,6 +56,7 @@ if ($num_rows > 0) {
         echo '<td>' . $humidity . '</td>';
         echo '<td>' . $pressure . '</td>';
         echo '</tr>';
+        $stmt->fetch(); // next
     }
 }
 
