@@ -40,6 +40,12 @@ T_MEASUREMENT = 5  # 5 sec
 data = []
 # Counter for passed seconds until sending to database
 sec_passed = 0
+# Set the humidity baseline to 40%, an optimal indoor humidity.
+hum_baseline = 40.0
+# This sets the balance between humidity and gas reading in the
+# calculation of air_quality_score (25:75, humidity:gas)
+hum_weighting = 0.25
+
 
 # Object for holding measurement data
 class BME680_Data:
@@ -48,6 +54,54 @@ class BME680_Data:
         self.gas = gas
         self.humidity = humidity
         self.pressure = pressure
+
+
+def get_indoor_air_quality_index(humidity, gas, gas_baseline):
+    # references: https://github.com/pimoroni/bme680-python/blob/master/examples/indoor-air-quality.py
+    #             https://github.com/G6EJD/BME680-Example
+    #             https://forum.iot-usergroup.de/t/indoor-air-quality-index/416/2
+    hum_offset = humidity - hum_baseline
+    gas_offset = gas_baseline - gas
+
+    # Calculate hum_score as the distance from the hum_baseline.
+    if hum_offset > 0:
+        hum_score = (100 - hum_baseline - hum_offset)
+        hum_score /= (100 - hum_baseline)
+        hum_score *= (hum_weighting * 100)
+
+    else:
+        hum_score = (hum_baseline + hum_offset)
+        hum_score /= hum_baseline
+        hum_score *= (hum_weighting * 100)
+
+    # Calculate gas_score as the distance from the gas_baseline.
+    if gas_offset > 0:
+        gas_score = (gas / gas_baseline)
+        gas_score *= (100 - (hum_weighting * 100))
+
+    else:
+        gas_score = 100 - (hum_weighting * 100)
+
+    # Calculate air_quality_score.
+    air_quality_score = hum_score + gas_score
+
+    # define air quality
+    if air_quality_score >= 301:
+        iaq_text = "Hazardous"
+    elif air_quality_score >= 201 and air_quality_score <= 300:
+        iaq_text = "Very Unhealthy"
+    elif air_quality_score >= 176 and air_quality_score <= 200:
+        iaq_text = "Unhealthy"
+    elif air_quality_score >= 151 and air_quality_score <= 175:
+        iaq_text = "Unhealthy for Sensitive Groups"
+    elif air_quality_score >= 51 and air_quality_score <= 150:
+        iaq_text = "Moderate"
+    elif air_quality_score >= 0 and air_quality_score <= 50:
+        iaq_text = "Good"
+    else:
+        iaq_text = ""
+
+    return air_quality_score, iaq_text
 
 
 try:
@@ -90,12 +144,17 @@ try:
             avg_humidity = statistics.mean(humidities)
             avg_pressure = statistics.mean(pressures)
 
+            last_data = data[-1]
+            iaq_index, iaq = get_indoor_air_quality_index(last_data.humidity, last_data.gas, avg_gas)
+
             # send to backend
             dataObj = {
                 'temperature': avg_temperature,
                 'gas': avg_gas,
                 'humidity': avg_humidity,
-                'pressure': avg_pressure
+                'pressure': avg_pressure,
+                'iaq_index': iaq_index,
+                'iaq': iaq
             }
 
             try:

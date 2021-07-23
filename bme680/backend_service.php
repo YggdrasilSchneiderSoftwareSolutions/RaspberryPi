@@ -38,13 +38,13 @@ class DBAccessManager {
 
 class SensorDataService extends DBAccessManager {
 
-    const INSERT_SENSOR_DATA = "INSERT INTO BME680 (temperature, gas, humidity, pressure) VALUES (?, ?, ?, ?)";
+    const INSERT_SENSOR_DATA = "INSERT INTO BME680 (temperature, gas, humidity, pressure, iaq_index, iaq) VALUES (?, ?, ?, ?, ?, ?)";
 
     function __construct() {
 		parent::__construct();
 	}
 
-    function insert_sensor_data($temperature, $gas, $humidity, $pressure) {
+    function insert_sensor_data($temperature, $gas, $humidity, $pressure, $iaq_index, $iaq) {
         $con = parent::getConnection();
 
         if (!$con) {
@@ -53,7 +53,7 @@ class SensorDataService extends DBAccessManager {
 		}
 
         $stmt = $con->prepare(self::INSERT_SENSOR_DATA);
-		if (!$stmt->bind_param("dddd", $temperature, $gas, $humidity, $pressure)) {
+		if (!$stmt->bind_param("ddddds", $temperature, $gas, $humidity, $pressure, $iaq_index, $iaq)) {
 			echo $stmt->error;
 		}
 		
@@ -73,7 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $gas = $_POST['gas'];
     $humidity = $_POST['humidity'];
     $pressure = $_POST['pressure'];
+    $iaq_index = $_POST['iaq_index'];
+    $iaq = $_POST['iaq'];
 
     $service = new SensorDataService();
-    $service->insert_sensor_data($temperature, $gas, $humidity, $pressure);
+    $service->insert_sensor_data($temperature, $gas, $humidity, $pressure, $iaq_index, $iaq);
 }

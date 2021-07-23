@@ -27,6 +27,8 @@
                 <th>Luft ohm</th>
                 <th>Feuchtigkeit %</th>
                 <th>Druck hPa</th>
+                <th>IAQ-Index</th>
+                <th>IAQ</th>
             </tr>
 <?php
 $conn = new mysqli("localhost", "root", "", "raspi");
@@ -34,8 +36,8 @@ if ($conn->connect_error) {
     die ("Connection failed: " . $conn->connect_error);
 }
 
-$stmt = $conn->prepare("SELECT time, temperature, gas, humidity, pressure FROM BME680 ORDER BY time DESC LIMIT 150");
-/*if (!$stmt->bind_param("dddd", $temperature, $gas, $humidity, $pressure)) {
+$stmt = $conn->prepare("SELECT time, temperature, gas, humidity, pressure, iaq_index, iaq FROM BME680 ORDER BY time DESC LIMIT 150");
+/*if (!$stmt->bind_param("ddddd", $temperature, $gas, $humidity, $pressure)) {
 	echo $stmt->error;
 }*/
 if (!$stmt->execute()) {
@@ -46,7 +48,7 @@ $stmt->store_result();
 $num_rows = $stmt->num_rows;
 
 if ($num_rows > 0) {
-    $stmt->bind_result($time, $temperature, $gas, $humidity, $pressure);
+    $stmt->bind_result($time, $temperature, $gas, $humidity, $pressure, $iaq_index, $iaq);
     $stmt->fetch(); // first row
     for ($i = 0; $i < $num_rows; $i++) {
         echo '<tr>';
@@ -55,6 +57,8 @@ if ($num_rows > 0) {
         echo '<td>' . $gas . '</td>';
         echo '<td>' . $humidity . '</td>';
         echo '<td>' . $pressure . '</td>';
+        echo '<td>' . $iaq_index . '</td>';
+        echo '<td>' . $iaq . '</td>';
         echo '</tr>';
         $stmt->fetch(); // next
     }
