@@ -82,8 +82,11 @@ def get_indoor_air_quality_index(humidity, gas, gas_baseline):
     else:
         gas_score = 100 - (hum_weighting * 100)
 
-    # Calculate air_quality_score.
-    air_quality_score = hum_score + gas_score
+    # Calculate air quality in % (100 is best)
+    air_quality_index = hum_score + gas_score
+
+    # Calculate air_quality_score (0 is best, 500 worst).
+    air_quality_score = (100 - air_quality_index) * 5
 
     # define air quality
     if air_quality_score >= 301:
