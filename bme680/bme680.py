@@ -6,6 +6,9 @@ import statistics
 import log
 import sys
 import configparser
+import adafruit_ssd1306
+import digitalio
+from PIL import Image, ImageDraw, ImageFont
 
 # setup config
 config = configparser.ConfigParser()
@@ -17,9 +20,24 @@ DB_SERVICE_URL = 'http://' \
                  + '/'\
                  + config["production.server"].get("serviceLocation")
 
-# Create sensor object, communicating over the board's default I2C bus
-i2c = board.I2C()  # uses board.SCL and board.SDA
-bme680 = adafruit_bme680.Adafruit_BME680_I2C(i2c, debug=False)
+# Switch for sending data to database on server
+send_to_db = config["DEFAULT"].getboolean("sendDb")
+
+# Counter for scrolling screens
+num_screen = 0
+
+# IAQ-Index Integer (oHm)
+iaq_index = 0
+# IAQ Text
+iaq = "..."
+# Gas baseline
+avg_gas = 0
+
+# BME680
+# Create sensor object, communicating over the board's default SPI bus
+cs = digitalio.DigitalInOut(board.D25)
+spi = board.SPI()
+bme680 = adafruit_bme680.Adafruit_BME680_SPI(spi, cs)
 
 # change this to match the location's pressure (hPa) at sea level (possibly for altitude only)
 bme680.sea_level_pressure = 1012.0
@@ -30,10 +48,10 @@ bme680.sea_level_pressure = 1012.0
 # You will usually have to add an offset to account for the temperature of
 # the sensor. This is usually around 5 degrees but varies by use. Use a
 # separate temperature sensor to calibrate this one.
-temperature_offset = -5
+temperature_offset = -1.5
 
-# Interval for sending average measurements to database in seconds (min * 60sec)
-T_SEND_DB = 300  # 5 min
+# Interval for calculating average measurements, gas baseline and sending to database in seconds (min * 60sec)
+T_BASE_INTERVAL = 300  # 5 min
 # Interval for each measurement in seconds
 T_MEASUREMENT = 5  # 5 sec
 # List for all measurements
@@ -45,6 +63,40 @@ hum_baseline = 40.0
 # This sets the balance between humidity and gas reading in the
 # calculation of air_quality_score (25:75, humidity:gas)
 hum_weighting = 0.25
+
+# SSD1306
+# Define the Reset Pin
+oled_reset = digitalio.DigitalInOut(board.D17)
+
+# Change these
+# to the right size for your display!
+WIDTH = 128
+HEIGHT = 64  # Change to 32 if needed
+
+# Use for I2C.
+i2c = board.I2C()
+disp = adafruit_ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c, addr=0x3c, reset=oled_reset)
+
+# Clear display.
+disp.fill(0)
+disp.show()
+
+# Create blank image for drawing.
+# Make sure to create image with mode '1' for 1-bit color.
+image = Image.new("1", (disp.width, disp.height))
+
+# Get drawing object to draw on image.
+draw = ImageDraw.Draw(image)
+
+# Load default font.
+#font = ImageFont.load_default()
+font = ImageFont.truetype('Minecraftia-Regular.ttf', 10)
+font_value = ImageFont.truetype('Minecraftia-Regular.ttf', 23)
+font_iaq = ImageFont.truetype('Minecraftia-Regular.ttf', 16)
+
+# Display image
+disp.image(image)
+disp.show()
 
 
 # Object for holding measurement data
@@ -90,17 +142,17 @@ def get_indoor_air_quality_index(humidity, gas, gas_baseline):
 
     # define air quality
     if air_quality_score >= 301:
-        iaq_text = "Hazardous"
+        iaq_text = "giftig"
     elif air_quality_score >= 201 and air_quality_score <= 300:
-        iaq_text = "Very Unhealthy"
+        iaq_text = "sau ungsund"
     elif air_quality_score >= 176 and air_quality_score <= 200:
-        iaq_text = "Unhealthy"
+        iaq_text = "ungsund"
     elif air_quality_score >= 151 and air_quality_score <= 175:
-        iaq_text = "Unhealthy for Sensitive Groups"
+        iaq_text = "bissl schlecht"
     elif air_quality_score >= 51 and air_quality_score <= 150:
-        iaq_text = "Moderate"
+        iaq_text = "moderat"
     elif air_quality_score >= 0 and air_quality_score <= 50:
-        iaq_text = "Good"
+        iaq_text = "guad"
     else:
         iaq_text = ""
 
@@ -119,6 +171,38 @@ try:
             )
         )
 
+        last_data = data[-1]
+        if avg_gas != 0:
+            iaq_index, iaq = get_indoor_air_quality_index(last_data.humidity, last_data.gas, avg_gas)
+
+        # Draw a black filled box to clear the image.
+        draw.rectangle((0, 0, disp.width, disp.height), outline=0, fill=0)
+
+        if num_screen == 0:
+            draw.text((2, 0), "Temp:", font=font, fill=255)
+            draw.text((32, 4), "%0.1f C" % last_data.temperature, font=font_value, fill=255)
+            draw.text((2, 30), "Luftf.:", font=font, fill=255)
+            draw.text((32, 38), "%0.1f %%" % last_data.humidity, font=font_value, fill=255)
+        elif num_screen == 1:
+            draw.text((2, 0), "Druck:", font=font, fill=255)
+            draw.text((10, 8), "%0.2f" % last_data.pressure, font=font_value, fill=255)
+            draw.text((105, 12), "hPa", font=font, fill=255)
+            draw.text((2, 38), "D'Luft is", font=font, fill=255)
+            if len(iaq) <= 7:
+                draw.text((32, 44), iaq, font=font_iaq, fill=255)
+            else:
+                draw.text((2, 44), iaq, font=font_iaq, fill=255)
+
+        # TODO binary
+        if num_screen == 0:
+            num_screen = 1
+        elif num_screen == 1:
+            num_screen = 0
+
+        # Display image.
+        disp.image(image)
+        disp.show()
+
         '''
         print("\nTemperature: %0.1f C" % (bme680.temperature + temperature_offset))
         print("Gas: %d ohm" % bme680.gas)
@@ -130,7 +214,7 @@ try:
         sec_passed += T_MEASUREMENT
         time.sleep(T_MEASUREMENT)
 
-        if sec_passed >= T_SEND_DB:
+        if sec_passed >= T_BASE_INTERVAL:
             # calculate averages
             temperatures = []
             gases = []
@@ -147,30 +231,30 @@ try:
             avg_humidity = statistics.mean(humidities)
             avg_pressure = statistics.mean(pressures)
 
-            last_data = data[-1]
             iaq_index, iaq = get_indoor_air_quality_index(last_data.humidity, last_data.gas, avg_gas)
 
             # send to backend
-            dataObj = {
-                'temperature': avg_temperature,
-                'gas': avg_gas,
-                'humidity': avg_humidity,
-                'pressure': avg_pressure,
-                'iaq_index': iaq_index,
-                'iaq': iaq
-            }
+            if send_to_db:
+                dataObj = {
+                    'temperature': avg_temperature,
+                    'gas': avg_gas,
+                    'humidity': avg_humidity,
+                    'pressure': avg_pressure,
+                    'iaq_index': iaq_index,
+                    'iaq': iaq
+                }
 
-            try:
-                response = requests.post(DB_SERVICE_URL, data=dataObj,
-                                         headers={'Content-type': 'application/x-www-form-urlencoded'})
+                try:
+                    response = requests.post(DB_SERVICE_URL, data=dataObj,
+                                             headers={'Content-type': 'application/x-www-form-urlencoded'})
 
-            # Sometimes Raspberry has problems with DNS...
-            except requests.exceptions.ConnectionError:
-                log.info('ConnectionError. Possibly problem with DNS')
-                continue
+                # Sometimes Raspberry has problems with DNS...
+                except requests.exceptions.ConnectionError:
+                    log.info('ConnectionError. Possibly problem with DNS')
+                    continue
 
-            if response.text != 'success':
-                raise Exception('Error in Backend. Http-status {}, {}'.format(response.status_code, response.text))
+                if response.text != 'success':
+                    raise Exception('Error in Backend. Http-status {}, {}'.format(response.status_code, response.text))
 
             # reset counter
             sec_passed = 0
@@ -178,8 +262,17 @@ try:
             data = []
 
 except KeyboardInterrupt:  # normal when stopping script
+    # Clear display.
+    disp.fill(0)
+    disp.show()
     pass
 except (MemoryError, OSError):  # possible if DNS-Error occurs and we're running out of memory
     log.error(sys.exc_info()[0:2])
+    # Clear display.
+    disp.fill(0)
+    disp.show()
 except:
     log.error(sys.exc_info()[0:2])
+    # Clear display.
+    disp.fill(0)
+    disp.show()
